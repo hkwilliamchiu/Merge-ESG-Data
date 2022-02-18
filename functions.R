@@ -14,7 +14,6 @@ custom_list <- list(
   identifier = "ISIN"
 )
 
-merge_data(custom_list)
 
 # ------------------------------------------------------------------------------
 # Main function
@@ -22,6 +21,7 @@ merge_data(custom_list)
 merge_data <- function(cl){
   
 }
+merge_data(custom_list)
 
 # ------------------------------------------------------------------------------
 # Prepare Bloomberg data
