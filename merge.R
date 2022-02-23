@@ -13,14 +13,14 @@ source("functions.R")
 custom_list <- list(
   Bloomberg = 1,
   Refinitiv = 1,
-  Sustainalytics = 1,
+  Sustainalytics = 0,
   identifier = "isin" # ISIN recommended
 )
 
-coalesce_names <- data.frame(
+coalesce <- data.frame(
   company_name = c("Name","Company Name","EntityName",NA),
   country = c("Country of Headquarters","Country","cntry_of_incorporation","HQ Address Country ISO"),
   industry = c("Sub_Industry","Subindustry",NA,NA)
 )
 
-merge_data(custom_list, coalesce_names)
+merge_data(custom_list, coalesce)
