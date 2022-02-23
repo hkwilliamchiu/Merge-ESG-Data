@@ -1,5 +1,5 @@
 ====== Description ======
-- This folder contains ESG data download from Bloomberg, Refinitiv and Sustainalytics, and an R script, merge.R, for cleaning and merging them, eventually producing merged_ESG.csv (or copies of it...)
+- This folder contains ESG data download from Bloomberg, Refinitiv and Sustainalytics, and an R script, merge.R, for cleaning and merging them, eventually producing merged_ESG.csv
 - There is minimum modification to the raw ESG data downloaded (only one modification to Bloomberg data as discussed below), almost all of the cleaning is performed by the code
 - The primary (and only) key for merge is ISIN which is provided by all 3 data vendors
 - Company name, sub-industry, and country of incorporation data provided by the 3 sources are also combined (via dplyr::coalesce)
