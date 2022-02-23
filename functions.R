@@ -1,4 +1,8 @@
 # Feb 23, 2022
+# to-do
+# support KLD social ratings
+# update sustainalytics cleaning function
+
 # ------------------------------------------------------------------------------
 # Setting up packages
 # ------------------------------------------------------------------------------
@@ -10,6 +14,8 @@ pacman::p_load("readxl","data.table","purrr","stringr","dplyr")
 # ------------------------------------------------------------------------------
 # works for bloomberg and refinitiv data
 check_data <- function(cl, data.list){
+  if (is_empty(data.list)) {stop("Files no found. Check naming of files.")}
+  
   lead_col_names <- colnames(data.list[[1]])
   
   # check if all dataframes in list have the same column names
@@ -70,8 +76,10 @@ p_sustainalytics <- function(cl){
   print("Cleaning Sustainalytics data...")
   
   # get file list with all csv files beginning with Sustainalytics
-  sustain.list <- list.files(pattern='^(?i)Sustainalytics.*.csv', recursive = TRUE)
+  sustain.list <- list.files(pattern='^(?i)sustainalytics.*.csv', recursive = TRUE)
   
+  if (is_empty(sustain.list)) {stop("Files no found. Check naming of files.")}
+    
   # read files as data.table
   sustain_focus <- fread(sustain.list[1])
   # remove from Sustainlytics focus data where EntityId row is NA
@@ -111,16 +119,23 @@ cl <- list(
   bloomberg = 1,
   refinitiv = 1,
   sustainalytics = 1,
-  # Choose one of the following supported identifier: ISIN
-  identifier = "SEDOL"
+  # ISIN recommended
+  identifier = "ISIN"
 )
+
+co <- data.frame(
+  row.names = c("bloomberg","refinitiv","sustainalytics"),
+  company_name = c("Name","Company Name","EntityName"),
+  country = c("cntry_of_incorporation","Country of Headquarters","Country"),
+  industry = c("Sub_Industry",NA,"Subindustry")
+)
+
 
 
 # ------------------------------------------------------------------------------
 # Main merge function
 # ------------------------------------------------------------------------------
-merge_data <- function(cl){
-  
+merge_data <- function(cl, co){
   cl$identifier <- toupper(cl$identifier)
   
   # put all data required (flagged as 1) together in a list of data.tables
@@ -141,24 +156,29 @@ merge_data <- function(cl){
   merge_list <- lapply(merge_list, function(x) x %>% select(-any_of(drop_columns)))
   
   # merge data by identifier using purrr::reduce
-  merged_data_raw <- merge_list %>% reduce(full_join, by=cl$identifier)
+  merged_data <- merge_list %>% reduce(full_join, by=cl$identifier)
  
-  # clean up columns of merged data
-  merged_data <- merged_data_raw %>% 
-    mutate(company_name = coalesce(EntityName, `Company Name`, Name)) %>%
-    mutate(sub_industry = coalesce(Sub_Industry, Subindustry)) %>%
-    mutate(country = coalesce(cntry_of_incorporation, `Country of Headquarters`, 
-                              Country, `HQ Address Country ISO`)) %>%
-    select(-any_of(c("EntityName", "Company Name", "Name", "Sub_Industry", "Subindustry",
-              "cntry_of_incorporation", "Country of Headquarters", "Country", "HQ Address Country ISO"))) %>%
-    select(cl$identifier, company_name, sub_industry, country, everything())
+  # coalesce specified items
+  for (i in colnames(co)){
+    merged_data <- merged_data %>%
+      mutate(!!i := coalesce(!!!select(., any_of(as.vector(na.omit(co[, i]))))))
+  }
+  
+  # clean up columns
+  merged_data <- merged_data %>% 
+    select(-any_of(as.vector(na.omit(as.matrix(co))))) %>%
+    select(cl$identifier, colnames(co), everything())
   
   # save merged data to source file location
-  existing_count <- length(list.files(pattern='^merged_ESG_data.*.csv', recursive = FALSE))
-  if (existing_count == 0){file_name <- "merged_ESG_data.csv"
-  } else if (existing_count == 1) {file_name <- "merged_ESG_data copy.csv"
-  } else {file_name <- paste0("merged_ESG_data copy ", existing_count, ".csv")}
+  # naming by counting number of copies
+  #existing_count <- length(list.files(pattern='^merged_ESG_data.*.csv', recursive = FALSE))
+  #if (existing_count == 0){file_name <- "merged_ESG_data.csv"
+  #} else if (existing_count == 1) {file_name <- "merged_ESG_data copy.csv"
+  #} else {file_name <- paste0("merged_ESG_data copy ", existing_count, ".csv")}
+  
+  # naming by pasting time
+  file_name <- paste0("merged_ESG_data ", Sys.time(), ".csv")
   write.csv(merged_data, file_name, na = "", row.names = FALSE)
   print(paste("Check source file location for merged data:", file_name))
+  
 }
-
