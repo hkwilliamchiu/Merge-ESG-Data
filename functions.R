@@ -1,53 +1,84 @@
+# Feb 23, 2022
 # ------------------------------------------------------------------------------
 # Setting up packages
 # ------------------------------------------------------------------------------
-library(readxl)
-library(data.table)
-library(dplyr)
-library(purrr)
+install.packages("pacman")
+pacman::p_load("readxl","data.table","purrr","stringr","dplyr")
+
+# ------------------------------------------------------------------------------
+# Check data validity
+# ------------------------------------------------------------------------------
+# works for bloomberg and refinitiv data
+check_data <- function(cl, data.list){
+  lead_col_names <- colnames(data.list[[1]])
+  
+  # check if all dataframes in list have the same column names
+  lapply(data.list, function(x) if (!identical(lead_col_names, colnames(x))) 
+    {stop("Trying to rbind data with different columns names. Check data columns!")} )
+  
+  # check if identifier exists
+  if (!(TRUE %in% str_detect(lead_col_names, paste0("(?i)", cl$identifier)))){
+    stop(paste("Identifier", cl$identifier, "not found"))
+  }
+  
+  data.df <- rbindlist(data.list)
+  
+  return(data.df)
+}
 
 # ------------------------------------------------------------------------------
 # Prepare Bloomberg data
 # ------------------------------------------------------------------------------
 p_bloomberg <- function(cl){
+  print("Cleaning Bloomberg data...")
+  
   # get file list with all xlsx files beginning with Bloomberg
   bloomberg.list <- list.files(pattern='^(?i)bloomberg.*.xlsx', recursive = TRUE)
   bloomberg.df.list <- lapply(bloomberg.list, read_excel)
   
+  # check validity of files, and if valid, 
   # bind files of different regions into one bloomberg data table
-  bloomberg.df <- rbindlist(bloomberg.df.list)
+  bloomberg.df <- check_data(cl, bloomberg.df.list)
   
   # clean column names
   colnames(bloomberg.df) <- gsub("^#|\\(\\)$", "", colnames(bloomberg.df))
   
   return(bloomberg.df)
 }
+
 # ------------------------------------------------------------------------------
 # Prepare Refinitiv data
 # ------------------------------------------------------------------------------
 p_refinitiv <- function(cl){
+  print("Cleaning Refinitiv data...")
+  
   # get file list with all xlsx files beginning with Refinitiv
   refinitiv.list <- list.files(pattern='^(?i)refinitiv.*.xlsx', recursive = TRUE)
   refinitiv.df.list <- lapply(refinitiv.list, read_excel)
   
+  # check validity of files, and if valid, 
   # bind files of different regions into one refinitiv data table
-  refinitiv.df <- rbindlist(refinitiv.df.list)
+  refinitiv.df <- check_data(cl, refinitiv.df.list)
+
   return(refinitiv.df)
 }
+
 # ------------------------------------------------------------------------------
 # Prepare Sustainalytics data
 # ------------------------------------------------------------------------------
 p_sustainalytics <- function(cl){
+  print("Cleaning Sustainalytics data...")
+  
   # get file list with all csv files beginning with Sustainalytics
-  file.list2 <- list.files(pattern='^(?i)Sustainalytics.*.csv', recursive = TRUE)
+  sustain.list <- list.files(pattern='^(?i)Sustainalytics.*.csv', recursive = TRUE)
   
   # read files as data.table
-  sustain_focus <- fread(file.list2[1])
+  sustain_focus <- fread(sustain.list[1])
   # remove from Sustainlytics focus data where EntityId row is NA
   sustain_focus <- sustain_focus[!is.na(sustain_focus$EntityId), ]
-  reference <- fread(file.list2[2])
+  reference <- fread(sustain.list[2])
   reference <- reference[!duplicated(reference[, "EntityId"], fromLast=T), ]
-  descriptions <- fread(file.list2[3])
+  descriptions <- fread(sustain.list[3])
   descriptions$Description <- gsub("(.*)\\s\\(fieldid_[0-9]+\\)", "\\1", descriptions$Description)
   descriptions <- descriptions[!duplicated(descriptions)]
   
@@ -69,22 +100,19 @@ p_sustainalytics <- function(cl){
   sustain_focus <- sustain_focus[!duplicated(sustain_focus[, "EntityId"], fromLast=F), ]
   
   # match company information from reference
-  sustain_focus <- left_join(sustain_focus, 
-                             reference[, c("EntityId", "ISIN", "EntityName", "Subindustry", "Country")], 
-                             by="EntityId")
+  cols <- c("EntityId", cl$identifier, "EntityName", "Subindustry", "Country")
+  sustain_focus <- left_join(sustain_focus, reference[, ..cols], by="EntityId")
   return(sustain_focus)
 }
-
-
 
 # -------------------------- development --------------------------
 
 cl <- list(
-  bloomberg = 0,
+  bloomberg = 1,
   refinitiv = 1,
-  sustainalytics = 0,
+  sustainalytics = 1,
   # Choose one of the following supported identifier: ISIN
-  identifier = "ISIN"
+  identifier = "SEDOL"
 )
 
 
@@ -92,38 +120,45 @@ cl <- list(
 # Main merge function
 # ------------------------------------------------------------------------------
 merge_data <- function(cl){
+  
+  cl$identifier <- toupper(cl$identifier)
+  
+  # put all data required (flagged as 1) together in a list of data.tables
   merge_list <- list()
   # note that seq_along(cl[1:3]) produces 1 2 3, so definitions of y and n are needed
   # if data flags do not appear first in custom list; cl[1:3] hard coded
   merge_list <- lapply(seq_along(cl[1:3]), function(y, n, i){
     if (y[i]==1){append(merge_list, get(paste0("p_", n[i]))(cl))}
   }, y=cl[1:3], n=names(cl[1:3]))
+  
   # remove any NULL values in list
   merge_list <- merge_list[lengths(merge_list) != 0]
   
   # convert all data into data.frames
-  merge_list <- lapply(merge_list, as.data.frame)
+  merge_list <- lapply(merge_list, as.data.frame, check.names=FALSE)
   # drop some unwanted columns as specified
   drop_columns <- c("ID", "Identifier (RIC)", "FieldDate", "file_date", "EntityId")
   merge_list <- lapply(merge_list, function(x) x %>% select(-any_of(drop_columns)))
   
-  # merge data by ISIN using purrr::reduce
-  merged_data_raw <- merge_list %>% reduce(full_join, by="ISIN")
-  
+  # merge data by identifier using purrr::reduce
+  merged_data_raw <- merge_list %>% reduce(full_join, by=cl$identifier)
+ 
   # clean up columns of merged data
   merged_data <- merged_data_raw %>% 
-    mutate(company_name = coalesce(`EntityName`, `Company Name`, Name)) %>%
+    mutate(company_name = coalesce(EntityName, `Company Name`, Name)) %>%
     mutate(sub_industry = coalesce(Sub_Industry, Subindustry)) %>%
     mutate(country = coalesce(cntry_of_incorporation, `Country of Headquarters`, 
                               Country, `HQ Address Country ISO`)) %>%
-    select(-any_of(c(`EntityName`, `Company Name`, Name, Sub_Industry, Subindustry,
-              cntry_of_incorporation, `Country of Headquarters`, Country, `HQ Address Country ISO`))) %>%
-    select(ISIN, company_name, sub_industry, country, everything())
+    select(-any_of(c("EntityName", "Company Name", "Name", "Sub_Industry", "Subindustry",
+              "cntry_of_incorporation", "Country of Headquarters", "Country", "HQ Address Country ISO"))) %>%
+    select(cl$identifier, company_name, sub_industry, country, everything())
   
   # save merged data to source file location
-  existing_name <- last(list.files(pattern='^merged.*.csv', recursive = FALSE))
-  file_name <- paste0(gsub("(.*).csv", "\\1", existing_name), "_copy.csv")
+  existing_count <- length(list.files(pattern='^merged_ESG_data.*.csv', recursive = FALSE))
+  if (existing_count == 0){file_name <- "merged_ESG_data.csv"
+  } else if (existing_count == 1) {file_name <- "merged_ESG_data copy.csv"
+  } else {file_name <- paste0("merged_ESG_data copy ", existing_count, ".csv")}
   write.csv(merged_data, file_name, na = "", row.names = FALSE)
-  
+  print(paste("Check source file location for merged data:", file_name))
 }
 
