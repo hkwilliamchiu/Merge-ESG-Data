@@ -36,8 +36,6 @@ check_data <- function(cl, data.list){
 # Prepare Bloomberg data
 # ------------------------------------------------------------------------------
 p_bloomberg <- function(cl){
-  print("Cleaning Bloomberg data...")
-  
   # get file list with all xlsx files beginning with Bloomberg
   bloomberg.list <- list.files(pattern='^(?i)bloomberg.*.xlsx', recursive = TRUE)
   bloomberg.df.list <- lapply(bloomberg.list, read_excel)
@@ -56,8 +54,6 @@ p_bloomberg <- function(cl){
 # Prepare Refinitiv data
 # ------------------------------------------------------------------------------
 p_refinitiv <- function(cl){
-  print("Cleaning Refinitiv data...")
-  
   # get file list with all xlsx files beginning with Refinitiv
   refinitiv.list <- list.files(pattern='^(?i)refinitiv.*.xlsx', recursive = TRUE)
   refinitiv.df.list <- lapply(refinitiv.list, read_excel)
@@ -73,8 +69,6 @@ p_refinitiv <- function(cl){
 # Prepare Sustainalytics data
 # ------------------------------------------------------------------------------
 p_sustainalytics <- function(cl){
-  print("Cleaning Sustainalytics data...")
-  
   # get file list with all csv files beginning with Sustainalytics
   sustain.list <- list.files(pattern='^(?i)sustainalytics.*.csv', recursive = TRUE)
   
@@ -113,25 +107,6 @@ p_sustainalytics <- function(cl){
   return(sustain_focus)
 }
 
-# -------------------------- development --------------------------
-
-cl <- list(
-  bloomberg = 1,
-  refinitiv = 1,
-  sustainalytics = 1,
-  # ISIN recommended
-  identifier = "ISIN"
-)
-
-co <- data.frame(
-  row.names = c("bloomberg","refinitiv","sustainalytics"),
-  company_name = c("Name","Company Name","EntityName"),
-  country = c("cntry_of_incorporation","Country of Headquarters","Country"),
-  industry = c("Sub_Industry",NA,"Subindustry")
-)
-
-
-
 # ------------------------------------------------------------------------------
 # Main merge function
 # ------------------------------------------------------------------------------
@@ -143,7 +118,10 @@ merge_data <- function(cl, co){
   # note that seq_along(cl[1:3]) produces 1 2 3, so definitions of y and n are needed
   # if data flags do not appear first in custom list; cl[1:3] hard coded
   merge_list <- lapply(seq_along(cl[1:3]), function(y, n, i){
-    if (y[i]==1){append(merge_list, get(paste0("p_", n[i]))(cl))}
+    if (y[i]==1){
+      print(paste("Cleaning", n[i], "data..."))
+      append(merge_list, get(paste0("p_", n[i]))(cl))
+      }
   }, y=cl[1:3], n=names(cl[1:3]))
   
   # remove any NULL values in list
@@ -177,8 +155,25 @@ merge_data <- function(cl, co){
   #} else {file_name <- paste0("merged_ESG_data copy ", existing_count, ".csv")}
   
   # naming by pasting time
-  file_name <- paste0("merged_ESG_data ", Sys.time(), ".csv")
+  file_name <- paste0("merged_ESG_data ", format(Sys.time(), "%Y-%m-%d %I.%M%p"), ".csv")
   write.csv(merged_data, file_name, na = "", row.names = FALSE)
   print(paste("Check source file location for merged data:", file_name))
   
 }
+
+# -------------------------- development --------------------------
+
+cl <- list(
+  bloomberg = 1,
+  refinitiv = 1,
+  sustainalytics = 1,
+  # ISIN recommended
+  identifier = "ISIN"
+)
+
+co <- data.frame(
+  row.names = c("bloomberg","refinitiv","sustainalytics"),
+  company_name = c("Name","Company Name","EntityName"),
+  country = c("cntry_of_incorporation","Country of Headquarters","Country"),
+  industry = c("Sub_Industry",NA,"Subindustry")
+)
