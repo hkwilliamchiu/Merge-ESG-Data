@@ -14,7 +14,7 @@ pacman::p_load("readxl","data.table","purrr","stringr","dplyr")
 # ------------------------------------------------------------------------------
 # works for bloomberg and refinitiv data
 check_data <- function(cl, data.list){
-  if (is_empty(data.list)) {stop("Files no found. Check naming of files.")}
+  if (is_empty(data.list)) {stop("No files found. Check naming of files.")}
   
   lead_col_names <- colnames(data.list[[1]])
   
