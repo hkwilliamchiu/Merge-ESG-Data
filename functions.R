@@ -6,7 +6,6 @@
 # ------------------------------------------------------------------------------
 # Setting up packages
 # ------------------------------------------------------------------------------
-install.packages("pacman")
 pacman::p_load("readxl","data.table","purrr","stringr","dplyr")
 
 # ------------------------------------------------------------------------------
@@ -35,11 +34,11 @@ check_data <- function(cl, data.list){
 # ------------------------------------------------------------------------------
 # Prepare Bloomberg data
 # ------------------------------------------------------------------------------
-p_bloomberg <- function(cl){
+p_Bloomberg <- function(cl){
   # get file list with all xlsx files beginning with Bloomberg
   bloomberg.list <- list.files(pattern='^(?i)bloomberg.*.xlsx', recursive = TRUE)
   bloomberg.df.list <- lapply(bloomberg.list, read_excel)
-  
+
   # check validity of files, and if valid, 
   # bind files of different regions into one bloomberg data table
   bloomberg.df <- check_data(cl, bloomberg.df.list)
@@ -53,7 +52,7 @@ p_bloomberg <- function(cl){
 # ------------------------------------------------------------------------------
 # Prepare Refinitiv data
 # ------------------------------------------------------------------------------
-p_refinitiv <- function(cl){
+p_Refinitiv <- function(cl){
   # get file list with all xlsx files beginning with Refinitiv
   refinitiv.list <- list.files(pattern='^(?i)refinitiv.*.xlsx', recursive = TRUE)
   refinitiv.df.list <- lapply(refinitiv.list, read_excel)
@@ -68,7 +67,7 @@ p_refinitiv <- function(cl){
 # ------------------------------------------------------------------------------
 # Prepare Sustainalytics data
 # ------------------------------------------------------------------------------
-p_sustainalytics <- function(cl){
+p_Sustainalytics <- function(cl){
   # get file list with all csv files beginning with Sustainalytics
   sustain.list <- list.files(pattern='^(?i)sustainalytics.*.csv', recursive = TRUE)
   
@@ -138,14 +137,21 @@ merge_data <- function(cl, co){
  
   # coalesce specified items
   for (i in colnames(co)){
+    co_temp <- as.vector(co[, i])[!is.na(as.vector(co[, i]))]
     merged_data <- merged_data %>%
-      mutate(!!i := coalesce(!!!select(., any_of(as.vector(na.omit(co[, i]))))))
+      mutate(!!i := coalesce(!!!select(., any_of(co_temp))))
   }
   
+  ncol_before <- ncol(merged_data)
+  
   # clean up columns
+  co_vector <- as.vector(as.matrix(co))[!is.na(as.vector(as.matrix(co)))]
   merged_data <- merged_data %>% 
-    select(-any_of(as.vector(na.omit(as.matrix(co))))) %>%
+    select(-any_of(co_vector)) %>%
     select(cl$identifier, colnames(co), everything())
+  
+  ncol_after <- ncol(merged_data)
+  print(paste("Removed", ncol_before - ncol_after, "columns used in coalesce"))
   
   # save merged data to source file location
   # naming by counting number of copies
@@ -157,23 +163,21 @@ merge_data <- function(cl, co){
   # naming by pasting time
   file_name <- paste0("merged_ESG_data ", format(Sys.time(), "%Y-%m-%d %I.%M%p"), ".csv")
   write.csv(merged_data, file_name, na = "", row.names = FALSE)
-  print(paste("Check source file location for merged data:", file_name))
+  print(paste0("Merged data exported as: ", file_name, ". Check source file location"))
   
 }
 
 # -------------------------- development --------------------------
 
 cl <- list(
-  bloomberg = 1,
-  refinitiv = 1,
-  sustainalytics = 1,
-  # ISIN recommended
-  identifier = "ISIN"
+  Bloomberg = 1,
+  Refinitiv = 1,
+  Sustainalytics = 1,
+  identifier = "isin" # ISIN recommended
 )
 
 co <- data.frame(
-  row.names = c("bloomberg","refinitiv","sustainalytics"),
-  company_name = c("Name","Company Name","EntityName"),
-  country = c("cntry_of_incorporation","Country of Headquarters","Country"),
-  industry = c("Sub_Industry",NA,"Subindustry")
+  company_name = c("Name","Company Name","EntityName",NA),
+  country = c("Country of Headquarters","Country","cntry_of_incorporation","HQ Address Country ISO"),
+  industry = c("Sub_Industry","Subindustry",NA,NA)
 )
