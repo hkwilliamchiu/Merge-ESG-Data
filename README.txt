@@ -1,7 +1,7 @@
 ====== Description ======
 - This folder contains ESG data download from Bloomberg, Refinitiv and Sustainalytics, and an R script, merge.R, for cleaning and merging them, eventually producing merged_ESG.csv
 - There is minimum modification to the raw ESG data downloaded (only one modification to Bloomberg data as discussed below), almost all of the cleaning is performed by the code
-- The primary (and only) key for merge is ISIN which is provided by all 3 data vendors
+- The primary key for merging is ISIN which is provided by all 3 data vendors
 - Company name, sub-industry, and country of incorporation data provided by the 3 sources are also combined (via dplyr::coalesce)
 
 ====== How to use ======
@@ -16,7 +16,7 @@
 The files that are used for merging are:
 
 - Bloomberg
-    * Bloomberg data.xlsx : a sample ESG data downloaded via Bloomberg Query Language. Sheet "BQL" cell A1 displays the fuction used to download the data. Note that the function can only run in a Bloomberg terminal. Shee1 contains a duplicate, as values, of the data downloaded, and the cell containing the BQL function is removed.
+    * Bloomberg data.xlsx : a sample ESG data downloaded via Bloomberg Query Language. Sheet "BQL" cell A1 displays the function used to download the data. Note that the function can only run in a Bloomberg terminal. Sheet1 contains a duplicate, as values, of the data downloaded, and the cell containing the BQL function is removed.
 
 - Refinitiv
     * Refinitiv_ESG_2020_AfricaAndOceania.xlsx : a sample ESG data downloaded via Refinitiv workspace. It contains some selected ESG metrics for all companies located in the region Africa and Oceania
