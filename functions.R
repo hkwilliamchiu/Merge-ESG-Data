@@ -1,19 +1,27 @@
-# Feb 23, 2022
+# May 16, 2022
 # to-do
-# support KLD social ratings
 # update sustainalytics cleaning function
+# options to take newest available observation or attach date and record all
+# implement S&P function
 
 # ------------------------------------------------------------------------------
 # Setting up packages
 # ------------------------------------------------------------------------------
 pacman::p_load("readxl","data.table","purrr","stringr","dplyr")
+# increasing storage capacity to 7GB
+memory.limit(size=56000)
 
 # ------------------------------------------------------------------------------
 # Check data validity
 # ------------------------------------------------------------------------------
+check_empty_list <- function(list){
+  if (is_empty(list)) {stop("No files found. Check naming of files.")}
+}
+
 # works for bloomberg and refinitiv data
 check_data <- function(cl, data.list){
-  if (is_empty(data.list)) {stop("No files found. Check naming of files.")}
+  
+  check_empty_list(data.list)
   
   lead_col_names <- colnames(data.list[[1]])
   
@@ -71,24 +79,50 @@ p_Sustainalytics <- function(cl){
   # get file list with all csv files beginning with Sustainalytics
   sustain.list <- list.files(pattern='^(?i)sustainalytics.*.csv', recursive = TRUE)
   
-  if (is_empty(sustain.list)) {stop("Files no found. Check naming of files.")}
-    
-  # read files as data.table
-  sustain_focus <- fread(sustain.list[1])
-  # remove from Sustainlytics focus data where EntityId row is NA
-  sustain_focus <- sustain_focus[!is.na(sustain_focus$EntityId), ]
-  reference <- fread(sustain.list[2])
+  check_empty_list(sustain.list)
+
+  # read reference and variable description files as data.table
+  reference <- fread(sustain.list[grepl("(?i)reference", sustain.list)])
   reference <- reference[!duplicated(reference[, "EntityId"], fromLast=T), ]
-  descriptions <- fread(sustain.list[3])
+  
+  descriptions <- fread(sustain.list[grepl("(?i)description", sustain.list)])
   descriptions$Description <- gsub("(.*)\\s\\(fieldid_[0-9]+\\)", "\\1", descriptions$Description)
   descriptions <- descriptions[!duplicated(descriptions)]
   
-  # replace variable id with variable name/description
-  for (i in 1:ncol(sustain_focus)) { 
-    if (colnames(sustain_focus)[i] %in% c("EntityId", "FieldDate", "file_date")){next}
-    colnames(sustain_focus)[i] = descriptions$Description[which(descriptions$`Variable Name`==colnames(sustain_focus)[i])]
-  } 
-  sustain_focus[, 4 := NULL]
+  # read remaining files
+  sustain.list.other <- sustain.list[!(grepl("(?i)reference | (?)description", sustain.list))]
+  check_empty_list(sustain.list.other)
+  # column bind # can't really do this, need to decide how to deal with data date first!
+  
+  sustain <- data.table()
+  for (i in 1:length(sustain.list.other)){
+    temp <- fread(sustain.list.other[i])
+    # remove from data where EntityId row is NA
+    temp <- temp[!is.na(temp$EntityId), ]
+    # replace variable id with variable name/description
+    for (i in 1:ncol(temp)) { 
+      if (colnames(temp)[i] %in% c("EntityId", "FieldDate", "file_date", "GroupId")){next}
+      if (length(descriptions$Description[which(descriptions$`Variable Name`==colnames(temp)[i])])==0){
+        print(paste0("Unable to locate variable name for ", colnames(temp)[i]))
+        next}
+      colnames(temp)[i] = descriptions$Description[which(descriptions$`Variable Name`==colnames(temp)[i])]
+    }
+    
+    # remove columns "FieldDate", "file_date", "GroupId" and duplicated EntityId
+    temp <- as.data.frame(temp)
+    temp <- temp[!duplicated(as.list(temp))]
+    drop_columns <- c("FieldDate", "file_date", "GroupId", "EntityId.1")
+    temp <- temp %>% select(-any_of(drop_columns))
+    
+    
+    # keeping only most recent data for the same company
+    temp <- temp[!duplicated(temp[, "EntityId"], fromLast=F), ]
+    
+    # merge
+    if (nrow(sustain) == 0){
+      sustain <- temp
+      }else{sustain <- full_join(sustain, temp, by = "EntityId")}
+  }
   
   # work this out
   #colnames(sustain_focus) <- lapply(colnames(sustain_focus), function(x) {
@@ -97,15 +131,19 @@ p_Sustainalytics <- function(cl){
   #  })
   
   
-  # keeping only most recent data for the same company
-  sustain_focus <- sustain_focus[!duplicated(sustain_focus[, "EntityId"], fromLast=F), ]
-  
   # match company information from reference
   cols <- c("EntityId", cl$identifier, "EntityName", "Subindustry", "Country")
-  sustain_focus <- left_join(sustain_focus, reference[, ..cols], by="EntityId")
-  return(sustain_focus)
+  sustain <- left_join(sustain, reference[, ..cols], by="EntityId")
+  
+  return(sustain)
 }
 
+# ------------------------------------------------------------------------------
+# Prepare S&P data
+# ------------------------------------------------------------------------------
+p_SandP <- function(cl){
+  print("Code reaches here")
+}
 # ------------------------------------------------------------------------------
 # Main merge function
 # ------------------------------------------------------------------------------
@@ -114,14 +152,14 @@ merge_data <- function(cl, co){
   
   # put all data required (flagged as 1) together in a list of data.tables
   merge_list <- list()
-  # note that seq_along(cl[1:3]) produces 1 2 3, so definitions of y and n are needed
-  # if data flags do not appear first in custom list; cl[1:3] hard coded
-  merge_list <- lapply(seq_along(cl[1:3]), function(y, n, i){
+  # note that seq_along(cl[1:4]) produces 1 2 3 4, so definitions of y and n are needed
+  # when data flags do not appear first in custom list; cl[1:4] hard coded
+  merge_list <- lapply(seq_along(cl[1:4]), function(y, n, i){
     if (y[i]==1){
       print(paste("Cleaning", n[i], "data..."))
       append(merge_list, get(paste0("p_", n[i]))(cl))
       }
-  }, y=cl[1:3], n=names(cl[1:3]))
+  }, y=cl[1:4], n=names(cl[1:4]))
   
   # remove any NULL values in list
   merge_list <- merge_list[lengths(merge_list) != 0]
@@ -163,7 +201,7 @@ merge_data <- function(cl, co){
   # naming by pasting time
   file_name <- paste0("merged_ESG_data ", format(Sys.time(), "%Y-%m-%d %I.%M%p"), ".csv")
   write.csv(merged_data, file_name, na = "", row.names = FALSE)
-  print(paste0("Merged data exported as: ", file_name, ". Check source file location"))
+  print(paste0("Exported: ", file_name, ". Check source file location"))
   
 }
 
@@ -173,6 +211,7 @@ cl <- list(
   Bloomberg = 1,
   Refinitiv = 1,
   Sustainalytics = 1,
+  SandP = 1,
   identifier = "isin" # ISIN recommended
 )
 

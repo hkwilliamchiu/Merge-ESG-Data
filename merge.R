@@ -14,6 +14,7 @@ custom_list <- list(
   Bloomberg = 1,
   Refinitiv = 1,
   Sustainalytics = 0,
+  SandP = 1,
   identifier = "isin" # ISIN recommended
 )
 
@@ -24,3 +25,4 @@ coalesce <- data.frame(
 )
 
 merge_data(custom_list, coalesce)
+
