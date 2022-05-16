@@ -6,7 +6,7 @@
 
 ====== How to use ======
 - If you are not in editing the source code, you should be able to have your data merged only using merge.R if you:
-   * Set the variables of the list custom_list to decide which data you have (1 to include and 0 to not include)
+   * Set the variables of the list custom_list to decide which data to use (1 to include and 0 to not include)
    * Provide the unique identifier that you want to use (ISIN is recommended)
    * Provide a data frame of columns that you want to coalesce from the data (note: given a set of vectors, dplyr::coalesce finds the first non-missing value at each position).
       - Column names you supplied (such as company_name, country, and industry) will be the names of the coalesced columns, and the vector on the right should contain columns that you want to use in coalesce. Hence make sure the column names do not duplicate any of the columns used for coalesce. All the columns used in coalesce will be removed from the merged data. Remember to fill in NAs to the shorter vectors so that each vector is of the same length.
