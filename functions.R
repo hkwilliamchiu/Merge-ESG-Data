@@ -1,4 +1,4 @@
-# May 16, 2022
+# May 17, 2022
 # to-do
 # update sustainalytics cleaning function
 # options to take newest available observation or attach date and record all
@@ -40,9 +40,17 @@ check_data <- function(cl, data.list){
 }
 
 # ------------------------------------------------------------------------------
+# Rename columns
+# ------------------------------------------------------------------------------
+rename_column <- function(data_names, name_list, text){
+  data_names <- ifelse(!(data_names %in% name_list), paste0(text, data_names), data_names)
+  return(data_names)
+}
+
+# ------------------------------------------------------------------------------
 # Prepare Bloomberg data
 # ------------------------------------------------------------------------------
-p_Bloomberg <- function(cl){
+p_Bloomberg <- function(cl, rename){
   # get file list with all xlsx files beginning with Bloomberg
   bloomberg.list <- list.files(pattern='^(?i)bloomberg.*.xlsx', recursive = TRUE)
   bloomberg.df.list <- lapply(bloomberg.list, read_excel)
@@ -53,6 +61,7 @@ p_Bloomberg <- function(cl){
   
   # clean column names
   colnames(bloomberg.df) <- gsub("^#|\\(\\)$", "", colnames(bloomberg.df))
+  colnames(bloomberg.df) <- rename_column(colnames(bloomberg.df), rename, "Bloomberg_")
   
   return(bloomberg.df)
 }
@@ -60,7 +69,7 @@ p_Bloomberg <- function(cl){
 # ------------------------------------------------------------------------------
 # Prepare Refinitiv data
 # ------------------------------------------------------------------------------
-p_Refinitiv <- function(cl){
+p_Refinitiv <- function(cl, rename){
   # get file list with all xlsx files beginning with Refinitiv
   refinitiv.list <- list.files(pattern='^(?i)refinitiv.*.xlsx', recursive = TRUE)
   refinitiv.df.list <- lapply(refinitiv.list, read_excel)
@@ -68,6 +77,7 @@ p_Refinitiv <- function(cl){
   # check validity of files, and if valid, 
   # bind files of different regions into one refinitiv data table
   refinitiv.df <- check_data(cl, refinitiv.df.list)
+  colnames(refinitiv.df) <- rename_column(colnames(refinitiv.df), rename, "Refinitiv_")
 
   return(refinitiv.df)
 }
@@ -75,7 +85,7 @@ p_Refinitiv <- function(cl){
 # ------------------------------------------------------------------------------
 # Prepare Sustainalytics data
 # ------------------------------------------------------------------------------
-p_Sustainalytics <- function(cl){
+p_Sustainalytics <- function(cl, rename){
   # get file list with all csv files beginning with Sustainalytics
   sustain.list <- list.files(pattern='^(?i)sustainalytics.*.csv', recursive = TRUE)
   
@@ -135,20 +145,25 @@ p_Sustainalytics <- function(cl){
   cols <- c("EntityId", cl$identifier, "EntityName", "Subindustry", "Country")
   sustain <- left_join(sustain, reference[, ..cols], by="EntityId")
   
+  # append column name prefix
+  colnames(sustain) <- rename_column(colnames(sustain), rename, "Sustain_")
+  
   return(sustain)
 }
 
 # ------------------------------------------------------------------------------
 # Prepare S&P data
 # ------------------------------------------------------------------------------
-p_SandP <- function(cl){
-  print("Code reaches here")
+p_SandP <- function(cl, rename){
+  print("In development")
 }
 # ------------------------------------------------------------------------------
 # Main merge function
 # ------------------------------------------------------------------------------
 merge_data <- function(cl, co){
   cl$identifier <- toupper(cl$identifier)
+  rename_list <- c(as.vector(unlist(co)), names(co), cl$identifier, c("ID", "Identifier (RIC)", "FieldDate", "file_date", "EntityId"))
+  rename_list <- rename_list[!is.na(rename_list)]
   
   # put all data required (flagged as 1) together in a list of data.tables
   merge_list <- list()
@@ -157,7 +172,7 @@ merge_data <- function(cl, co){
   merge_list <- lapply(seq_along(cl[1:4]), function(y, n, i){
     if (y[i]==1){
       print(paste("Cleaning", n[i], "data..."))
-      append(merge_list, get(paste0("p_", n[i]))(cl))
+      append(merge_list, get(paste0("p_", n[i]))(cl, rename_list))
       }
   }, y=cl[1:4], n=names(cl[1:4]))
   
@@ -204,19 +219,3 @@ merge_data <- function(cl, co){
   print(paste0("Exported: ", file_name, ". Check source file location"))
   
 }
-
-# -------------------------- development --------------------------
-
-cl <- list(
-  Bloomberg = 1,
-  Refinitiv = 1,
-  Sustainalytics = 1,
-  SandP = 1,
-  identifier = "isin" # ISIN recommended
-)
-
-co <- data.frame(
-  company_name = c("Name","Company Name","EntityName",NA),
-  country = c("Country of Headquarters","Country","cntry_of_incorporation","HQ Address Country ISO"),
-  industry = c("Sub_Industry","Subindustry",NA,NA)
-)
