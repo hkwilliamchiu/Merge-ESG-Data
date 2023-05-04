@@ -5,7 +5,7 @@
 - Company name, sub-industry, and country of incorporation data provided by the 3 sources are also combined (via dplyr::coalesce)
 
 ====== How to use ======
-- If you are not in editing the source code, you should be able to have your data merged only using merge.R if you:
+- If you do not need to edit the source code, you should be able to have your data merged only using merge.R if you:
    * Set the variables of the list custom_list to decide which data to use (1 to include and 0 to not include)
    * Provide the unique identifier that you want to use (ISIN is recommended)
    * Provide a data frame of columns that you want to coalesce from the data (note: given a set of vectors, dplyr::coalesce finds the first non-missing value at each position).
