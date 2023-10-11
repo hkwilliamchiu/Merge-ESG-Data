@@ -1,8 +1,6 @@
-# May 17, 2022
+# Date: May 4, 2023
 # to-do
-# update sustainalytics cleaning function
-# options to take newest available observation or attach date and record all
-# implement S&P function
+# update sustainalytics cleaning function to fit new formate from WRDS
 
 # ------------------------------------------------------------------------------
 # Setting up packages
@@ -27,7 +25,7 @@ check_data <- function(cl, data.list){
   
   # check if all dataframes in list have the same column names
   lapply(data.list, function(x) if (!identical(lead_col_names, colnames(x))) 
-    {stop("Trying to rbind data with different columns names. Check data columns!")} )
+  {stop("Trying to row bind data with different columns names. Check data columns!")} )
   
   # check if identifier exists
   if (!(TRUE %in% str_detect(lead_col_names, paste0("(?i)", cl$identifier)))){
@@ -35,7 +33,6 @@ check_data <- function(cl, data.list){
   }
   
   data.df <- rbindlist(data.list)
-  
   return(data.df)
 }
 
@@ -54,7 +51,7 @@ p_Bloomberg <- function(cl, rename){
   # get file list with all xlsx files beginning with Bloomberg
   bloomberg.list <- list.files(pattern='^(?i)bloomberg.*.xlsx', recursive = TRUE)
   bloomberg.df.list <- lapply(bloomberg.list, read_excel)
-
+  
   # check validity of files, and if valid, 
   # bind files of different regions into one bloomberg data table
   bloomberg.df <- check_data(cl, bloomberg.df.list)
@@ -78,7 +75,7 @@ p_Refinitiv <- function(cl, rename){
   # bind files of different regions into one refinitiv data table
   refinitiv.df <- check_data(cl, refinitiv.df.list)
   colnames(refinitiv.df) <- rename_column(colnames(refinitiv.df), rename, "Refinitiv_")
-
+  
   return(refinitiv.df)
 }
 
@@ -90,7 +87,7 @@ p_Sustainalytics <- function(cl, rename){
   sustain.list <- list.files(pattern='^(?i)sustainalytics.*.csv', recursive = TRUE)
   
   check_empty_list(sustain.list)
-
+  
   # read reference and variable description files as data.table
   reference <- fread(sustain.list[grepl("(?i)reference", sustain.list)])
   reference <- reference[!duplicated(reference[, "EntityId"], fromLast=T), ]
@@ -131,7 +128,7 @@ p_Sustainalytics <- function(cl, rename){
     # merge
     if (nrow(sustain) == 0){
       sustain <- temp
-      }else{sustain <- full_join(sustain, temp, by = "EntityId")}
+    }else{sustain <- full_join(sustain, temp, by = "EntityId")}
   }
   
   # work this out
@@ -139,7 +136,6 @@ p_Sustainalytics <- function(cl, rename){
   #  x <- descriptions$Description[which(descriptions$`Variable Name`==x)]
   #  return(x)
   #  })
-  
   
   # match company information from reference
   cols <- c("EntityId", cl$identifier, "EntityName", "Subindustry", "Country")
@@ -155,8 +151,88 @@ p_Sustainalytics <- function(cl, rename){
 # Prepare S&P data
 # ------------------------------------------------------------------------------
 p_SandP <- function(cl, rename){
-  print("In development")
+  # convert ID to ISIN in the csv files
+  # https://bizlib247.wordpress.com/2017/04/24/converting-company-ids-for-quoted-companies/
+  
+  # get file list with all csv files beginning with S&P
+  SandP.list <- list.files(pattern='^(?i)S&P Paris Alignment Data.csv', recursive = TRUE)
+  
+  check_empty_list(SandP.list)
+  
+  SandP.df.list <- lapply(SandP.list, fread)
+  SandP.df <- check_data(cl, SandP.df.list)
+  
+  colnames(SandP.df) <- rename_column(colnames(SandP.df), rename, "SandP_")
+  
+  return(SandP.df)
+  
+  #*** Reshape to columns with different dates #
 }
+
+# ------------------------------------------------------------------------------
+# Prepare ISS voting data
+# ------------------------------------------------------------------------------
+p_ISS <- function(cl, rename){
+  # get file list with all csv files beginning with ISS - Voting
+  ISS.list <- list.files(pattern='^(?i)ISS.*Voting.*.csv', recursive = TRUE)
+  check_empty_list(ISS.list)
+  
+  ISS.df.list <- lapply(ISS.list, fread)
+  ISS_fund <- ISS.df.list[[which(tolower(ISS.list) %like% "fund")]]
+  table(unique(ISS_fund$CompanyID) %in% ISS_company$CompanyID)
+  length(unique(ISS_fund$CompanyName))
+  ISS_company <- ISS.df.list[[which(tolower(ISS.list) %like% "company")]]
+  ISS_company <- ISS_company[!duplicated(ISS_company$CUSIP),]
+  rm(ISS.df.list)
+  
+  temp <- unique(ISS_fund$CompanyID)
+  table(temp %in% ISS_company$CompanyID)
+  #ISS.df <- rbindlist(ISS.df.list)
+  #ISS.df <- check_data(cl, ISS.df.list)
+}
+
+# ------------------------------------------------------------------------------
+# Prepare Refinitiv mutual fund data
+# ------------------------------------------------------------------------------
+p_Refinitiv_13F <- function(cl, rename){
+  # get file list with all csv files beginning with Thomson Reuters
+  TR.list <- list.files(pattern='^(?i)Thomson Reuters.*.csv', recursive = TRUE)
+  
+  check_empty_list(TR.list)
+  
+  TR.df.list <- lapply(TR.list, fread)
+  Refinitiv_13F <- TR.df.list[[which(tolower(TR.list) %like% "13f")]]
+  Refinitiv_13F_blank <- Refinitiv_13F[Refinitiv_13F$cusip == "", ]
+  Refinitiv_13F <- Refinitiv_13F[!duplicated(Refinitiv_13F$cusip), ]
+  Refinitiv_S12 <- TR.df.list[[which(tolower(TR.list) %like% "s12")]]
+  Refinitiv_S12_blank <- Refinitiv_S12[Refinitiv_S12$cusip == "", ]
+  Refinitiv_S12 <- Refinitiv_S12[!duplicated(Refinitiv_S12$cusip), ]
+  Refinitiv_S12 <- Refinitiv_S12[!duplicated(Refinitiv_S12$stkname), ]
+  
+  #rm(TR.df.list)
+  
+  table(Refinitiv_13F$ticker == "")[["TRUE"]]
+  table(Refinitiv_13F$cusip == "")[["TRUE"]]
+  table(Refinitiv_S12$ticker == "")[["TRUE"]]
+  table(Refinitiv_S12$cusip == "")[["TRUE"]]
+  
+  temp <- unique(c(Refinitiv_13F$ticker, Refinitiv_S12$ticker))
+  temp_sus <- unique(df_sus_company_full$Ticker)
+  table(temp %in% temp_sus)
+  
+  table(temp_com <- unique(c(Refinitiv_13F$stkname, Refinitiv_S12$stkname)))
+  
+  table(Refinitiv_13F$stkname == "")[["TRUE"]]
+  table(Refinitiv_S12$stkname == "")[["TRUE"]]
+  
+  "AMMO INC" %in% gsub("[^[:alnum:] ]", "", toupper(df_sus_company_full$EntityName))
+}
+
+# ------------------------------------------------------------------------------
+# Prepare Refinitiv S12 data
+# ------------------------------------------------------------------------------
+
+
 # ------------------------------------------------------------------------------
 # Main merge function
 # ------------------------------------------------------------------------------
@@ -173,7 +249,7 @@ merge_data <- function(cl, co){
     if (y[i]==1){
       print(paste("Cleaning", n[i], "data..."))
       append(merge_list, get(paste0("p_", n[i]))(cl, rename_list))
-      }
+    }
   }, y=cl[1:4], n=names(cl[1:4]))
   
   # remove any NULL values in list
@@ -187,7 +263,7 @@ merge_data <- function(cl, co){
   
   # merge data by identifier using purrr::reduce
   merged_data <- merge_list %>% reduce(full_join, by=cl$identifier)
- 
+  
   # coalesce specified items
   for (i in colnames(co)){
     co_temp <- as.vector(co[, i])[!is.na(as.vector(co[, i]))]
@@ -219,3 +295,36 @@ merge_data <- function(cl, co){
   print(paste0("Exported: ", file_name, ". Check source file location"))
   
 }
+
+# -------------------------- development --------------------------
+cl <- list(
+  Bloomberg = 1,
+  Refinitiv = 1,
+  Sustainalytics = 0,
+  SandP = 1,
+  identifier = "isin" # ISIN recommended
+)
+
+co <- data.frame(
+  company_name = c("Name", "Company Name", "EntityName", NA),
+  country = c("Country of Headquarters", "Country","cntry_of_incorporation", "HQ Address Country ISO"),
+  industry = c("Sub_Industry", "Subindustry", NA, NA)
+)
+
+re_ref <- read.csv("Refinitiv_Universe.csv")
+re_ref <- re_ref %>%
+  mutate(Instrument = gsub("\\..*", "", Instrument))
+sus_ref <- read.csv("Sustainalytics data/Sustainalytics Reference data.csv")
+
+unique_ticker <- unique(c(re_ref$Instrument, sus_ref$Ticker))
+unique_ticker <- unique_ticker[unique_ticker != ""]
+unique_name <- unique(c(re_ref$Company.Common.Name, sus_ref$EntityName))
+unique_name <- unique_name[unique_name != ""]
+unique_cusip <- unique(sus_ref$CUSIP)
+unique_cusip <- unique_cusip[unique_cusip != ""]
+
+table(ISS_company$ticker %in% unique_ticker | ISS_company$Name %in% unique_name | ISS_company$CUSIP %in% unique_cusip)
+table(Refinitiv_13F$ticker %in% unique_ticker | Refinitiv_13F$stkname %in% unique_name | Refinitiv_13F$cusip %in% unique_cusip)
+table(Refinitiv_S12$ticker %in% unique_ticker | Refinitiv_S12$stkname %in% unique_name | Refinitiv_S12$cusip %in% unique_cusip)
+
+length(unique(c(sus_ref$Ticker, re_ref$Instrument)))
